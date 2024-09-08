@@ -26,7 +26,7 @@ class CNNModel(nn.Module):
         self.conv2 = nn.Conv2d(6, 16, 5)
         self.fc1 = nn.Linear(16*9*9, l1)
         self.fc2 = nn.Linear(l1, l2)
-        self.fc3 = nn.Linear(l2, 15)
+        self.fc3 = nn.Linear(l2, 3)
 
     def forward(self, x):
         x = self.maxPool(F.relu(self.conv1(x)))
@@ -70,20 +70,31 @@ def train_model(config):
             if i % 5 == 0:
                 print("Epoch {}, Iter {} : loss {}".format(epoch, i, running_loss))
                 running_loss = 0.0
-
+    
+    dataset_type = "/validation"
+    val_loader, _ = get_data(dataset_path, dataset_type)
+    nb_steps = 0
+    for i, data in enumerate(val_loader):
+        images, labels = data
+        with torch.no_grad():
+            outputs = cnn(images)
+            nb_steps += 1
+            loss = loss_fn(outputs, labels)
+            validation_loss = loss.numpy()
 
     checkpoint_data = {
         "epoch": epoch,
         "cnn_state_dict": cnn.state_dict(),
         "optimizer_state_dict": optimizer.state_dict()
     }
+
     with tempfile.TemporaryDirectory() as checkpoint_dir:
         data_path = Path(checkpoint_dir) / "data.pkl"
         with open(data_path, "wb") as fp:
             pickle.dump(checkpoint_data, fp)
         
         checkpoint = Checkpoint.from_directory(checkpoint_dir)
-        train.report({"loss": running_loss}, checkpoint=checkpoint)
+        train.report({"loss": validation_loss / nb_steps}, checkpoint=checkpoint)
 
 
 if __name__ == "__main__":
