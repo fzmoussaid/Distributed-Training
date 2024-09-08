@@ -49,10 +49,10 @@ def save_entire_model(model, path):
     model_scripted.save(path)
 
 def train_model(config):
-    dataset_path = "./vegetables/vegetable_images"
+    dataset_path = "./vegetable_images"
     dataset_type = "/train"
     train_loader, _ = get_data(dataset_path, dataset_type)
-    cnn = CNNModel(l1=config["hidden_layer_size_1"], l2=config["hidden_layer_size_2"])
+    cnn = CNNModel(l1=config["l1"], l2=config["l2"])
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(cnn.parameters(), lr=config["lr"])
     nb_epochs = 5
@@ -74,7 +74,7 @@ def train_model(config):
 
     checkpoint_data = {
         "epoch": epoch,
-        "net_state_dict": cnn.state_dict(),
+        "cnn_state_dict": cnn.state_dict(),
         "optimizer_state_dict": optimizer.state_dict()
     }
     with tempfile.TemporaryDirectory() as checkpoint_dir:
@@ -84,13 +84,6 @@ def train_model(config):
         
         checkpoint = Checkpoint.from_directory(checkpoint_dir)
         train.report({"loss": running_loss}, checkpoint=checkpoint)
-    
-    return {"loss" :running_loss}
-
-def dummy_test_fc(config):
-    print("test")
-    return  {"lr" :config["lr"]}
-    
 
 
 if __name__ == "__main__":
@@ -107,4 +100,16 @@ if __name__ == "__main__":
     best_trial = analysis.get_best_trial("loss", "min", "last")
     print("Configuration for best trial: {}".format(best_trial.config))
     print("Loss for best trial: {}".format(best_trial.last_result["loss"]))
+    # save model based on the best configuration
+    checkpoint = analysis.get_best_checkpoint(trial=best_trial, metric="loss", mode="min")
+    with checkpoint.as_directory() as checkpoint_dir:
+        data_path = Path(checkpoint_dir) / "data.pkl"
+        with open(data_path, "rb") as fp:
+            checkpoint_data = pickle.load(fp)
+    cnn = CNNModel(best_trial.config["l1"], best_trial.config["l2"])
+    cnn.load_state_dict(checkpoint_data["cnn_state_dict"])
+    # Save model as a state dictionary for a quick model evaluation
+    save_model(cnn, "test_classification_model.pth")
+    # Save scripted model to use for inference
+    save_entire_model(cnn , "vegetables_classification_net.pth")
 
